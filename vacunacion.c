@@ -21,7 +21,7 @@ struct farmacia {
 };
 
 int hab;
-//int vacI;
+int vacI;
 int vacMin;
 int vacMax;
 int fabMin;
@@ -30,11 +30,13 @@ int tReparto;
 int tCita;
 int tDesp;
 int dato;
+int prueba;
 
 int vacunadosTanda;
 
 int vacunasCentro[5];
 int demanda[5];
+int terminado[3];
 
 struct farmacia f1,f2,f3;
 
@@ -47,6 +49,7 @@ pthread_mutex_t arrayMutex[5];
 
 void *crearVacunas(void* arg);
 void *vacunarse(void* arg);
+void *repartirFinal();
 
 int main(int argc, char *argv[]) {
 
@@ -99,6 +102,7 @@ int main(int argc, char *argv[]) {
 			if(i == 0) hab = dato;
 			else if(i == 1) {
 				for(int j=0;j<5;j++) vacunasCentro[j]=dato;
+				vacI = vacunasCentro[0];
 			}
 			else if(i == 2) vacMin = dato;
 			else if(i == 3) vacMax = dato;
@@ -138,6 +142,11 @@ int main(int argc, char *argv[]) {
 	pthread_create(&farm2, NULL, crearVacunas,&f2);
 	pthread_create(&farm3, NULL, crearVacunas,&f3);
 	
+	for(int m = 0; m<3; m++) terminado[m] = 0;
+	
+	pthread_t vacunasFinal;
+	pthread_create(&vacunasFinal,NULL,repartirFinal,NULL);
+	
 	
 	for(int j = 0; j < 10; j++){
 		vacunados = 0;
@@ -156,13 +165,13 @@ int main(int argc, char *argv[]) {
 		pthread_mutex_unlock(&mutexVacTanda);
 	}
 	printf("VACUNACION TERMINADA\n");
+	exit(0);
 	
 	
 	while(1);
 }
 
 
-//EL MINIMO NO NOS FUNCIONA LA PUTA MADRE QUE NOS PARIO
 
 
 void *crearVacunas(void* arg){
@@ -194,29 +203,27 @@ void *crearVacunas(void* arg){
 				if(demanda[i]<=numVac) {
 					pthread_mutex_lock(&mutexDema);
 					aumentado[i]= demanda[i];
+					numVac = numVac-demanda[i];
+					demanda[i]=0;
 					pthread_mutex_unlock(&mutexDema);
 					mostrar[i] = aumentado[i];
 					pthread_mutex_lock(&arrayMutex[i]);
 					vacunasCentro[i] = vacunasCentro[i] + aumentado[i];
 					aumentado[i]=0;
 					pthread_mutex_unlock(&arrayMutex[i]);
-					pthread_mutex_lock(&mutexDema);
-					numVac=numVac-demanda[i];
-					demanda[i] = 0;
-					pthread_mutex_unlock(&mutexDema);
 				} else {
 					aumentado[i] = numVac;
+					pthread_mutex_lock(&mutexDema);
+					demanda[i]=demanda[i] - numVac;
+					numVac=0;
+					pthread_mutex_unlock(&mutexDema);
 					mostrar[i] = aumentado[i];
 					pthread_mutex_lock(&arrayMutex[i]);
 					vacunasCentro[i] = vacunasCentro[i] + aumentado[i];
 					aumentado[i]=0;
 					pthread_mutex_unlock(&arrayMutex[i]);
-					pthread_mutex_lock(&mutexDema);
-					demanda[i]=demanda[i] - numVac;
-					pthread_mutex_unlock(&mutexDema);
-					numVac=0;
+					
 				}
-				pthread_cond_broadcast(&hayVac[i]);
 			}
 		}
 		
@@ -239,12 +246,17 @@ void *crearVacunas(void* arg){
 				pthread_mutex_unlock(&arrayMutex[i]);
 			}
 			printf("Fabrica %d entrega %d vacunas en el centro %d\n",farma.num,mostrar[i],i+1);
+			pthread_cond_broadcast(&hayVac[i]);
 		}
 		printf("NumVacCreadas: %d\n",numVacCreadas);
 		//REPARTIR EQUITATIVAMENTE
 		
 	}
 	printf("Fabrica %d ha fabricado todas sus vacunas\n",farma.num);
+	terminado[farma.num-1] = 1;
+	pthread_mutex_lock(&mutexDema);
+	for(int j = 0; j<5; j++) printf("20Demanda centro fin fabrica %d: %d\n",j+1,demanda[j]);
+	pthread_mutex_unlock(&mutexDema);
 	printf("vacunadosTanda: %d\n",vacunadosTanda);
 	for(int p=0;p<5;p++) printf("Vacunas en centro %d son %d\n",(p+1),vacunasCentro[p]);
 	pthread_exit(0);
@@ -280,5 +292,39 @@ void *vacunarse(void* arg){
 	printf("Habitante %d vacunado en el centro %d\n",paci.numPac, paci.centroP);
 	
 	pthread_exit(0);
+
+}
+
+void* repartirFinal(){
+	while((terminado[0] == 0) || (terminado[1] == 0) || (terminado[2] == 0));
+	printf("Inicio repartir final\n");
+	int vacunasRestantes = 0;
+	for(int i = 0; i < 5; i++){
+		vacunasRestantes = vacunasRestantes + vacunasCentro[i];
+	}
+	printf("Vacunas Restantes %d\n",vacunasRestantes);
+	for(int j = 0; j<5; j++) printf("Demanda centro %d: %d\n",j+1,demanda[j]);
+	
+	
+	while(vacunasRestantes> (vacI*5)) {
+		int tiempoFab = rand() % (fabMax-fabMin+1) + fabMin; //numero aleatorio de tiempo de fabricacion de vacunas (entre fabMin y fabMax)
+		sleep(tiempoFab);
+		for(int h = 0; h < 5; h++){
+			pthread_mutex_lock(&mutexDema);
+			vacunasRestantes = vacunasRestantes - demanda[h];
+			pthread_mutex_lock(&arrayMutex[h]);
+			vacunasCentro[h] = demanda[h];
+			pthread_mutex_unlock(&arrayMutex[h]);
+			if(demanda[h] != 0){
+				pthread_cond_broadcast(&hayVac[h]);
+			}
+			demanda[h] = 0;
+			pthread_mutex_unlock(&mutexDema);
+		}
+		printf("vacunadosTanda: %d\n",vacunadosTanda);
+	}
+	
+	pthread_exit(0);
+
 
 }
