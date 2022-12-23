@@ -76,6 +76,7 @@ int main(int argc, char *argv[]) {
 	int dato;		//Variable para almacenar los datos leidos del fichero de entrada
 	int i,j;		//indices fors
 	int remo;		//variable auxiliar para imprimir las vacunas que removemos a posteriori
+	int num;
 	
 	pthread_t farm1, farm2, farm3;
 	pthread_t vacunasFinal;
@@ -204,14 +205,17 @@ int main(int argc, char *argv[]) {
 	
 	//Creamos los hilos de todos los pacientes que van en cada tanda
 	for(i = 0; i < 10; i++){
-		for(j = 0; j < hab/10; j++){
+		num = hab/10;
+		if(i==0) num = num + hab%10;
+		for(j = 0; j < num; j++){
 			pthread_mutex_lock(&v);
 			p.centroP = rand()%5+1;
-			p.numPac = i*120 + j + 1;
+			if(i==0) p.numPac = j + 1;
+			else p.numPac = i*num + j + 1 + hab%10;
 			pthread_create(&paciente, NULL, vacunarse, &p);
 		}
 		
-		while(vacunadosTanda<(hab/10));			//Esperamos a que todos los pacientes de la tanda se vacunen
+		while(vacunadosTanda<num);			//Esperamos a que todos los pacientes de la tanda se vacunen
 		
 		pthread_mutex_lock(&mutexVacTanda);		//Cambiamos de tanda y reseteamos
 		tanda++;
@@ -235,8 +239,13 @@ int main(int argc, char *argv[]) {
 	for(i = 0; i < 3; i++) {
 		printf("FABRICA %d\n",(i+1));
 		fprintf(fout,"FABRICA %d\n",(i+1));
-		printf("\t Vacunas Fabricadas: %d\n",(hab/3));
-		fprintf(fout,"\t Vacunas Fabricadas: %d\n",(hab/3));
+		if(i==0) {
+			printf("\t Vacunas Fabricadas: %d\n",(hab/3) + hab%3);
+			fprintf(fout,"\t Vacunas Fabricadas: %d\n",(hab/3) + hab%3);
+		} else {
+			printf("\t Vacunas Fabricadas: %d\n",(hab/3));
+			fprintf(fout,"\t Vacunas Fabricadas: %d\n",(hab/3));
+		}
 		for(j = 0; j < 5; j++) {
 			printf("\t Centro %d: %d vacunas\n",(j+1),estadisticaFarma[j+(5*i)]);
 			fprintf(fout,"\t Centro %d: %d vacunas\n",(j+1),estadisticaFarma[j+(5*i)]);
@@ -252,15 +261,20 @@ int main(int argc, char *argv[]) {
 		fprintf(fout,"\t Vacunas recibidas: %d\n",estadisticaFarma[i]+ estadisticaFarma[i+5]+ estadisticaFarma[i+10]);
 		printf("\t Habitantes vacunados: %d\n",estadisticaPaci[i]);
 		fprintf(fout,"\t Habitantes vacunados: %d\n",estadisticaPaci[i]);
-		printf("\t Vacunas restantes: %d\n",(estadisticaFarma[i]+ estadisticaFarma[i+5]+ estadisticaFarma[i+10]+vacI)-estadisticaPaci[i]);
-		fprintf(fout,"\t Vacunas restantes: %d\n",(estadisticaFarma[i]+ estadisticaFarma[i+5]+ estadisticaFarma[i+10]+vacI)-estadisticaPaci[i]);
+		if((estadisticaFarma[i]+ estadisticaFarma[i+5]+ estadisticaFarma[i+10]+vacI)-estadisticaPaci[i] < 0) {
+			printf("\t Vacunas restantes: 0\n");
+			fprintf(fout, "\t Vacunas restantes: 0\n");
+		} else {
+			printf("\t Vacunas restantes: %d\n",(estadisticaFarma[i]+ estadisticaFarma[i+5]+ estadisticaFarma[i+10]+vacI)-estadisticaPaci[i]);
+			fprintf(fout,"\t Vacunas restantes: %d\n",(estadisticaFarma[i]+ estadisticaFarma[i+5]+ estadisticaFarma[i+10]+vacI)-estadisticaPaci[i]);
+		}
 		printf("\n");
 		fprintf(fout,"\n");
 	}
 	
+	printf("RE-UBICACION DE VACUNAS\n");
+	fprintf(fout,"RE-UBICACION DE VACUNAS\n");
 	for(i = 0; i < 5; i++) {
-		printf("RE-UBICACION DE VACUNAS\n");
-		fprintf(fout,"RE-UBICACION DE VACUNAS\n");
 		remo = (estadisticaFarma[i]+ estadisticaFarma[i+5]+ estadisticaFarma[i+10]+vacI)-estadisticaPaci[i];
 		if(remo < 0) remo = vacI -remo;
 		else if(remo >= 0 && remo <= vacI) remo = vacI - remo;
@@ -444,9 +458,7 @@ void* repartirFinal(){
 
 	while((terminado[0] == 0) || (terminado[1] == 0) || (terminado[2] == 0));	//Esperamos a que las 3 farmacias terminen de fabricar
 	
-	for(i = 0; i < 5; i++) vacunasCentro[i] = 0;		//Ponemos las vacunas de cada centro a cero
-	
-	while((tanda*(hab/10) + vacunadosTanda) < hab) {	//Mientras no se vacune todo el mundo seguimos comprobando
+	while((tanda*(hab/10) + vacunadosTanda + hab%10) < hab) {	//Mientras no se vacune todo el mundo seguimos comprobando
 		tiempoRep = rand() % (tReparto) + 1; 		//numero aleatrio de tiempo de reparto (entre 1 y tReparto)
 		sleep(tiempoRep);
 		
@@ -456,11 +468,11 @@ void* repartirFinal(){
 			vacunasCentro[h] = demanda[h];
 			pthread_mutex_unlock(&arrayMutex[h]);
 			if(demanda[h] != 0){
-				pthread_cond_broadcast(&hayVac[h]);	//Mandamos señal si nos ha llegamo un habitante
+				pthread_cond_broadcast(&hayVac[h]);	//Mandamos señal si nos ha llegado un habitante
 			}
 			demanda[h] = 0;
 			pthread_mutex_unlock(&mutexDema);
 		}
-	}	
+	}
 	pthread_exit(0);
 }
