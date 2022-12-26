@@ -283,6 +283,27 @@ int main(int argc, char *argv[]) {
 		fprintf(fout,"\t Centro %d: %d\n",(i+1),remo);
 	}
 	
+	//DESTRUIMOS TODOS LOS SEMAFOROS
+	pthread_mutex_destroy(&v);
+	
+	pthread_mutex_destroy(&arrayMutex[0]);
+	pthread_mutex_destroy(&arrayMutex[1]);
+	pthread_mutex_destroy(&arrayMutex[2]);
+	pthread_mutex_destroy(&arrayMutex[3]);
+	pthread_mutex_destroy(&arrayMutex[4]);
+	
+	pthread_mutex_destroy(&mutexDema);
+	pthread_mutex_destroy(&mutexVacTanda);
+	pthread_mutex_destroy(&mutexEstaPaci);
+	pthread_mutex_destroy(&mutexOut);
+	
+	//DESTRUIMOS TODAS LAS CONDICONES
+	pthread_cond_destroy(&hayVac[0]);
+	pthread_cond_destroy(&hayVac[1]);
+	pthread_cond_destroy(&hayVac[2]);
+	pthread_cond_destroy(&hayVac[3]);
+	pthread_cond_destroy(&hayVac[4]);
+	
 	fclose(fout);
 	return 0;
 }
